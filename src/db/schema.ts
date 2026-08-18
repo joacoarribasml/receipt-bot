@@ -14,15 +14,9 @@ export const receipts = pgTable("receipts", {
   purchaseDate: text("purchase_date"),
   currency: varchar("currency", { length: 8 }),
   total: numeric("total", { precision: 12, scale: 2 }),
+  totalUsd: numeric("total_usd", { precision: 12, scale: 2 }),
+  exchangeRateArsUsd: numeric("exchange_rate_ars_usd", { precision: 12, scale: 4 }),
   status: varchar("status", { length: 16 }).notNull().default("pending"),
   rawExtraction: text("raw_extraction"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const receiptItems = pgTable("receipt_items", {
-  id: serial("id").primaryKey(),
-  receiptId: integer("receipt_id").notNull().references(() => receipts.id),
-  name: text("name").notNull(),
-  quantity: numeric("quantity", { precision: 10, scale: 2 }),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
 });

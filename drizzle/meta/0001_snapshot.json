@@ -1,6 +1,6 @@
 {
-  "id": "f9d0297d-b52b-43b2-acaf-ea7e0a2d6889",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "95ab43f8-da01-4d45-8145-8bf084289c68",
+  "prevId": "f9d0297d-b52b-43b2-acaf-ea7e0a2d6889",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -47,6 +47,18 @@
         "total": {
           "name": "total",
           "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_usd": {
+          "name": "total_usd",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exchange_rate_ars_usd": {
+          "name": "exchange_rate_ars_usd",
+          "type": "numeric(12, 4)",
           "primaryKey": false,
           "notNull": false
         },

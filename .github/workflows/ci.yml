@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
@@ -17,4 +17,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm test
+        env:
+          # dummy values so config.ts's required() checks pass; tests mock any real network/API calls
+          TELEGRAM_BOT_TOKEN: "0:test"
+          ANTHROPIC_API_KEY: "test"
+          ALLOWED_TELEGRAM_USER_IDS: "1"
+          DATABASE_URL: "postgres://test:test@localhost:5432/test"
+          REDIS_URL: "redis://localhost:6379"
       - run: npm run build

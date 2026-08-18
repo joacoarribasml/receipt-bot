@@ -16,12 +16,9 @@ Each `.json` is the hand-verified ground truth, matching the shape of `ReceiptEx
   "vendor": "Carrefour",
   "purchaseDate": "2026-08-10",
   "currency": "ARS",
-  "total": 15230.5,
-  "items": [
-    { "name": "Leche", "quantity": 2, "unitPrice": 1200 }
-  ]
+  "total": 15230.5
 }
 ```
 
-Aim for 20-30 receipts covering: clear photos, blurry/angled photos, long itemized
-receipts, handwritten receipts, and receipts in a currency other than ARS.
+Aim for 20-30 receipts covering: clear photos, blurry/angled photos, handwritten
+receipts, and receipts in a currency other than ARS.

@@ -3,8 +3,10 @@ import { Redis } from "ioredis";
 import type { Bot } from "grammy";
 import { config } from "../config.js";
 import { extractReceipt } from "../llm/extractReceipt.js";
+import { isNothingFound } from "../llm/isNothingFound.js";
+import { getBlueRate, convertArsToUsd } from "../fx/dolarBlue.js";
 import { db } from "../db/client.js";
-import { users, receipts, receiptItems } from "../db/schema.js";
+import { users, receipts } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 
 export interface ReceiptJobData {
@@ -25,6 +27,16 @@ async function getOrCreateUser(telegramUserId: string) {
   return created;
 }
 
+async function toUsd(total: number | null, currency: string | null): Promise<{ totalUsd: number | null; rate: number | null }> {
+  if (total === null) return { totalUsd: null, rate: null };
+  if (currency?.toUpperCase() === "USD") return { totalUsd: total, rate: 1 };
+  if (currency?.toUpperCase() !== "ARS") return { totalUsd: null, rate: null };
+
+  const blueRate = await getBlueRate();
+  if (!blueRate) return { totalUsd: null, rate: null };
+  return { totalUsd: convertArsToUsd(total, blueRate), rate: blueRate.venta };
+}
+
 export function startReceiptWorker(bot: Bot) {
   return new Worker<ReceiptJobData>(
     "receipt-processing",
@@ -39,6 +51,13 @@ export function startReceiptWorker(bot: Bot) {
 
       const extraction = await extractReceipt({ imageBase64, mediaType });
 
+      if (isNothingFound(extraction)) {
+        await bot.api.sendMessage(chatId, "Couldn't find a receipt in that photo. Try a clearer picture?");
+        return;
+      }
+
+      const { totalUsd, rate } = await toUsd(extraction.total, extraction.currency);
+
       const user = await getOrCreateUser(telegramUserId);
       const [receipt] = await db
         .insert(receipts)
@@ -49,31 +68,22 @@ export function startReceiptWorker(bot: Bot) {
           purchaseDate: extraction.purchaseDate,
           currency: extraction.currency,
           total: extraction.total?.toString(),
+          totalUsd: totalUsd?.toString(),
+          exchangeRateArsUsd: rate?.toString(),
           status: "processed",
           rawExtraction: JSON.stringify(extraction),
         })
         .returning();
 
-      if (extraction.items.length > 0) {
-        await db.insert(receiptItems).values(
-          extraction.items.map((item) => ({
-            receiptId: receipt.id,
-            name: item.name,
-            quantity: item.quantity?.toString(),
-            unitPrice: item.unitPrice?.toString(),
-          })),
-        );
-      }
-
-      const itemLines = extraction.items.map((i) => `  • ${i.name} — ${i.unitPrice ?? "?"}`).join("\n");
+      const usdLine = totalUsd !== null ? `\n≈ USD ${totalUsd.toFixed(2)} (blue rate ${rate})` : "";
       const lowConfidenceNote = extraction.confidence !== "high" ? `\n⚠️ confidence: ${extraction.confidence}` : "";
       await bot.api.sendMessage(
         chatId,
         `✅ Saved receipt #${receipt.id}\n` +
           `Vendor: ${extraction.vendor ?? "unknown"}\n` +
           `Date: ${extraction.purchaseDate ?? "unknown"}\n` +
-          `Total: ${extraction.total ?? "?"} ${extraction.currency ?? ""}\n` +
-          (itemLines ? `Items:\n${itemLines}` : "") +
+          `Total: ${extraction.total ?? "?"} ${extraction.currency ?? ""}` +
+          usdLine +
           lowConfidenceNote,
       );
     },

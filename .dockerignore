@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.git
+pgdata
+*.log
+.DS_Store
+eval/

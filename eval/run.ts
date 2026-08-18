@@ -5,7 +5,7 @@ import { extractReceipt } from "../src/llm/extractReceipt.js";
 import { receiptExtractionSchema, type ReceiptExtraction } from "../src/llm/schema.js";
 
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures");
-const SCALAR_FIELDS = ["vendor", "purchaseDate", "currency", "total"] as const;
+const FIELDS = ["vendor", "purchaseDate", "currency", "total"] as const;
 
 function mediaTypeFor(file: string): "image/jpeg" | "image/png" | "image/webp" {
   const ext = extname(file).toLowerCase();
@@ -14,18 +14,17 @@ function mediaTypeFor(file: string): "image/jpeg" | "image/png" | "image/webp" {
   return "image/jpeg";
 }
 
+const APOSTROPHE_VARIANTS = /[´`''‘’]/g;
+
+function normalizeString(s: string): string {
+  return s.trim().toLowerCase().replace(APOSTROPHE_VARIANTS, "'").replace(/\s+/g, " ");
+}
+
 function scalarMatches(a: unknown, b: unknown): boolean {
   if (a === null || b === null) return a === b;
   if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 0.01;
-  if (typeof a === "string" && typeof b === "string") return a.trim().toLowerCase() === b.trim().toLowerCase();
+  if (typeof a === "string" && typeof b === "string") return normalizeString(a) === normalizeString(b);
   return a === b;
-}
-
-function itemSetMatch(actual: ReceiptExtraction["items"], expected: ReceiptExtraction["items"]): number {
-  if (expected.length === 0) return actual.length === 0 ? 1 : 0;
-  const expectedNames = new Set(expected.map((i) => i.name.trim().toLowerCase()));
-  const hits = actual.filter((i) => expectedNames.has(i.name.trim().toLowerCase())).length;
-  return hits / expected.length;
 }
 
 async function main() {
@@ -36,9 +35,9 @@ async function main() {
     return;
   }
 
-  const fieldHits: Record<string, number> = Object.fromEntries(SCALAR_FIELDS.map((f) => [f, 0]));
-  let itemScoreSum = 0;
+  const fieldHits: Record<string, number> = Object.fromEntries(FIELDS.map((f) => [f, 0]));
   let totalLatencyMs = 0;
+  let receiptCount = 0;
   const rows: string[] = [];
 
   for (const imageFile of imageFiles) {
@@ -60,16 +59,23 @@ async function main() {
     const latencyMs = Date.now() - start;
     totalLatencyMs += latencyMs;
 
-    for (const field of SCALAR_FIELDS) {
-      if (scalarMatches(actual[field], groundTruth[field])) fieldHits[field]++;
+    let hits = 0;
+    const mismatches: string[] = [];
+    for (const field of FIELDS) {
+      if (scalarMatches(actual[field], groundTruth[field])) {
+        fieldHits[field]++;
+        hits++;
+      } else {
+        mismatches.push(`    ${field}: got ${JSON.stringify(actual[field])}, expected ${JSON.stringify(groundTruth[field])}`);
+      }
     }
-    const itemScore = itemSetMatch(actual.items, groundTruth.items);
-    itemScoreSum += itemScore;
 
-    rows.push(`${imageFile.padEnd(20)} items=${(itemScore * 100).toFixed(0)}%  ${latencyMs}ms`);
+    receiptCount++;
+    rows.push(`${imageFile.padEnd(20)} ${hits}/${FIELDS.length} fields  ${latencyMs}ms`);
+    if (mismatches.length > 0) rows.push(mismatches.join("\n"));
   }
 
-  const n = rows.length;
+  const n = receiptCount;
   if (n === 0) {
     console.log("No fixtures with matching ground truth found.");
     return;
@@ -77,10 +83,9 @@ async function main() {
 
   console.log(rows.join("\n"));
   console.log("\n--- Summary ---");
-  for (const field of SCALAR_FIELDS) {
+  for (const field of FIELDS) {
     console.log(`${field.padEnd(14)} ${((fieldHits[field] / n) * 100).toFixed(1)}%`);
   }
-  console.log(`${"items (recall)".padEnd(14)} ${((itemScoreSum / n) * 100).toFixed(1)}%`);
   console.log(`${"avg latency".padEnd(14)} ${(totalLatencyMs / n).toFixed(0)}ms`);
   console.log(`n = ${n} receipts`);
 }
